@@ -144,5 +144,5 @@ def create_order(order: OrderRequest):
         "customer": order.customer,
         "ordered items": order.items,
         "unit_price": unit_price,
-        "revenue": total_revenue,
+        "revenue": total_revenue
     }
