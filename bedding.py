@@ -55,6 +55,17 @@ class OrderRequest(BaseModel):
 def create_order(order: OrderRequest):
     conn = get_db() # Connect
     cursor = conn.cursor(dictionary=True)
+    total_revenue = 0
+    cursor.execute(
+    """
+    INSERT INTO orders (customer_name, total_revenue)
+    VALUES (%s, %s)
+    """,
+    (order.customer, total_revenue)
+)
+
+    order_id = cursor.lastrowid
+
     for sku, qty in order.items.items():
         cursor.execute("SELECT * FROM products WHERE sku = %s",(sku,))
         product = cursor.fetchone() # selected row in products
@@ -66,19 +77,19 @@ def create_order(order: OrderRequest):
         if product is None:
             cursor.close()
             conn.close()
-            raise HTTPException(status_code=404, detail='Product not found')
+            raise HTTPException(status_code=400, detail='Product not found')
         
     #Check if order quantity is valid:
         if qty <= 0:
             cursor.close()
             conn.close()
-            raise HTTPException(status_code=404, detail='Order quantity must be at least 1')
+            raise HTTPException(status_code=400, detail='Order quantity must be at least 1')
         
     #Check if enough stock exist:
-        if product['stock'] <= qty:
+        if product['stock'] < qty:
             cursor.close()
             conn.close()
-            raise HTTPException(status_code=404, detail='Not enough product!')
+            raise HTTPException(status_code=400, detail='Not enough product!')
 
     #Put on orders list
     #--------------------------------------------------------
@@ -86,23 +97,21 @@ def create_order(order: OrderRequest):
         unit_price = product['price']
         revenue = qty*unit_price
 
-    # Insert orders in order tables
+    # Insert orders in order_items tables
         cursor.execute(
-            """
-            INSERT INTO orders(
-                customer_name,
-                sku,
-                quantity,
-                unit_price,
-                order_revenue
-            )
-            VALUES (%s,%s,%s,%s,%s)
-            """,
-            (order.customer,sku,qty,unit_price,revenue)
+         """
+        INSERT INTO order_items(
+            order_id,
+            sku,
+            quantity,
+            unit_price,
+            line_revenue
         )
-         # New Order ID
-        new_order_id = cursor.lastrowid
-        conn.commit()#This saves: INSERT (order) and UPDATE (stock)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+         (order_id, sku, qty, unit_price, revenue)
+        )
+        total_revenue += revenue
 
         # Update stocks and so on
         cursor.execute(
@@ -114,18 +123,26 @@ def create_order(order: OrderRequest):
             (qty, sku)
         )
         # Save all changes
-        conn.commit()
 
-
+    # Update total revenue AFTER loop
+    cursor.execute(
+        """
+        UPDATE orders
+        SET customer_name = %s, total_revenue = %s
+        WHERE order_id = %s
+        """,
+        (order.customer, total_revenue, order_id)
+    )
+    conn.commit()#This saves: INSERT (order) and UPDATE (stock)
     cursor.close()
     conn.close()
 
     # Return message
     return {
         "message": "Order created successfully",
-        "order_id": new_order_id,
+        "order_id": order_id,
         "customer": order.customer,
         "ordered items": order.items,
         "unit_price": unit_price,
-        "revenue": revenue,
+        "revenue": total_revenue,
     }
