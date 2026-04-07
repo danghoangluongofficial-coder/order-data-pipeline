@@ -145,8 +145,3 @@ def create_order(order: OrderRequest):
         "ordered items": order.items,
         "unit_price": unit_price,
         "revenue": total_revenue,
-<<<<<<< HEAD
-    }
-=======
-    }
->>>>>>> abc91d0 (Initial commit)
